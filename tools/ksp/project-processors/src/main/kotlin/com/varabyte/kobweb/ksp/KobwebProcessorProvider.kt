@@ -11,6 +11,7 @@ import com.varabyte.kobweb.ProcessorMode
 import com.varabyte.kobweb.backendFile
 import com.varabyte.kobweb.frontendFile
 import com.varabyte.kobweb.ksp.backend.BackendProcessor
+import com.varabyte.kobweb.ksp.worker.WorkerProcessor
 import com.varabyte.kobweb.ksp.frontend.AppProcessor
 import com.varabyte.kobweb.ksp.frontend.FrontendProcessor
 
@@ -41,6 +42,13 @@ class KobwebProcessorProvider : SymbolProcessorProvider {
                             logger = environment.logger,
                             genFile = genFile,
                             qualifiedPagesPackage = pagesPackage,
+                        )
+                    }
+
+                    ProcessorMode.WORKER -> {
+                        WorkerProcessor(
+                            codeGenerator = environment.codeGenerator,
+                            logger = environment.logger,
                         )
                     }
                 }

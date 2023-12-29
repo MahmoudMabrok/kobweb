@@ -1,54 +1,15 @@
+package com.varabyte.kobweb.gradle.core.util
+
+import org.gradle.api.tasks.TaskCollection
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpack
 
-plugins {
-    alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.kotlinx.serialization)
-    id("com.varabyte.kobweb.worker")
-}
-
-group = "playground.worker"
-version = "1.0-SNAPSHOT"
-
-val workerFileName = "worker.js"
-
-kobweb {
-    kspProcessorDependency.set("com.varabyte.kobweb:project-processors")
-}
-
-kotlin {
-    js(IR) {
-        binaries.executable()
-        browser {
-            commonWebpackConfig {
-                outputFileName = workerFileName
-            }
-        }
-    }
-
-    sourceSets {
-        val jsMain by getting {
-            dependencies {
-                api(libs.kotlinx.serialization.json)
-                implementation("com.varabyte.kobweb:kobweb-worker")
-            }
-        }
-    }
-}
-
-val exposeWorkerScript by configurations.registering {
-    isCanBeConsumed = true
-    isCanBeResolved = false
-}
-
-val outputFile = tasks.named("jsBrowserProductionWebpack").map { task ->
-    task.outputs.files.first { it.name == "productionExecutable" }.resolve(workerFileName)
-}
-artifacts {
-    add(exposeWorkerScript.name, outputFile) // dependency from jsBrowserProductionWebpack task is inferred
-}
-
-hackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode()
-
+// <IMPORTANT!>
+// This method is public so that it can be called from other Kobweb plugins. However, a normal user should probably not
+// be calling this method unless they know what they're doing.
+// </IMPORTANT!>
+// This method should be called like this:
+//    project.tasks.withType<KotlinWebpack>().configureHackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode()
+// and it disables the continuous mode logic in the webpack task.
 // For context, see: https://youtrack.jetbrains.com/issue/KT-55820/jsBrowserDevelopmentWebpack-in-continuous-mode-doesnt-keep-outputs-up-to-date
 // It seems like the webpack tasks are broken when run in continuous mode (it has a special branch of logic for handling
 // `isContinuous` mode and I guess it just needs more time to bake).
@@ -57,8 +18,8 @@ hackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode()
 // non-continuous logic branch.
 // Basically, we're setting this value to always be false:
 // https://github.com/JetBrains/kotlin/blob/4af0f110c7053d753c92fd9caafb4be138fdafba/libraries/tools/kotlin-gradle-plugin/src/common/kotlin/org/jetbrains/kotlin/gradle/targets/js/webpack/KotlinWebpack.kt#L276
-fun Project.hackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode() {
-    tasks.withType<KotlinWebpack>().configureEach {
+fun TaskCollection<KotlinWebpack>.configureHackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode() {
+    this.configureEach {
         // Gradle generates subclasses via bytecode generation magic. Here, we need to grab the superclass to find
         // the private field we want.
         this::class.java.superclass.declaredFields

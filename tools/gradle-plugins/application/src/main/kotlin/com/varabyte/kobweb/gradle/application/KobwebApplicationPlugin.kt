@@ -31,6 +31,7 @@ import com.varabyte.kobweb.gradle.core.ksp.applyKspPlugin
 import com.varabyte.kobweb.gradle.core.ksp.setupKspJs
 import com.varabyte.kobweb.gradle.core.ksp.setupKspJvm
 import com.varabyte.kobweb.gradle.core.tasks.KobwebTask
+import com.varabyte.kobweb.gradle.core.util.configureHackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode
 import com.varabyte.kobweb.gradle.core.util.namedOrNull
 import com.varabyte.kobweb.project.KobwebFolder
 import com.varabyte.kobweb.project.conf.KobwebConfFile
@@ -45,6 +46,7 @@ import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.file.RegularFile
 import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.TaskCollection
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.build.event.BuildEventsListenerRegistry
 import org.gradle.jvm.tasks.Jar
@@ -215,9 +217,9 @@ class KobwebApplicationPlugin @Inject constructor(
         }
         buildEventsListenerRegistry.onTaskCompletion(taskListenerService)
 
+        project.tasks.withType<KotlinWebpack>().configureHackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode()
         project.buildTargets.withType<KotlinJsIrTarget>().configureEach {
             val jsTarget = JsTarget(this)
-            project.hackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode()
 
             project.setupKspJs(jsTarget, ProcessorMode.APP)
 
@@ -391,25 +393,3 @@ fun Project.notifyKobwebAboutServerPluginTask(
 }
 
 val Project.kobwebBuildTarget get() = project.extra["kobwebBuildTarget"] as BuildTarget
-
-// For context, see: https://youtrack.jetbrains.com/issue/KT-55820/jsBrowserDevelopmentWebpack-in-continuous-mode-doesnt-keep-outputs-up-to-date
-// It seems like the webpack tasks are broken when run in continuous mode (it has a special branch of logic for handling
-// `isContinuous` mode and I guess it just needs more time to bake).
-// Unfortunately, `kobweb run` lives and dies on its live reloading behavior. So in order to allow it to support
-// webpack, we need to get a little dirty here, using reflection to basically force the webpack task to always take the
-// non-continuous logic branch.
-// Basically, we're setting this value to always be false:
-// https://github.com/JetBrains/kotlin/blob/4af0f110c7053d753c92fd9caafb4be138fdafba/libraries/tools/kotlin-gradle-plugin/src/common/kotlin/org/jetbrains/kotlin/gradle/targets/js/webpack/KotlinWebpack.kt#L276
-private fun Project.hackWorkaroundSinceWebpackTaskIsBrokenInContinuousMode() {
-    tasks.withType<KotlinWebpack>().configureEach {
-        // Gradle generates subclasses via bytecode generation magic. Here, we need to grab the superclass to find
-        // the private field we want.
-        this::class.java.superclass.declaredFields
-            // Note: Isn't ever null for now but checking protects us against future changes to KotlinWebpack
-            .firstOrNull { it.name == "isContinuous" }
-            ?.let { isContinuousField ->
-                isContinuousField.isAccessible = true
-                isContinuousField.setBoolean(this, false)
-            }
-    }
-}
